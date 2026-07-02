@@ -141,9 +141,11 @@ client with the SmartCredit MCP server and exposes:
 
 ### Agent Definitions
 
-`.claude/agents/` contains 6 ready-made agent definitions pulled from the
+`.claude/agents/` contains 6 agent definitions bundled from the
 [web3-borrow-lend-mcp](https://github.com/SmartCredit-io/web3-borrow-lend-mcp/tree/main/.claude/agents)
-repo. To refresh them:
+repo — **do not edit them directly**. The examples work out of the box with no extra checkout needed.
+
+To refresh them when the upstream repo updates:
 
 ```bash
 gh api repos/SmartCredit-io/web3-borrow-lend-mcp/contents/.claude/agents | python3 -c "
@@ -172,9 +174,22 @@ for f in json.load(sys.stdin):
 
 ## Getting Started
 
-1. Visit [smartcredit.io/learn](https://smartcredit.io/learn) to explore the documentation.
-2. Browse examples in this repository by topic.
-3. Follow each example's setup instructions.
+```bash
+git clone https://github.com/SmartCredit-io/examples.git
+cd examples
+pip install -r python/requirements.txt
+export ANTHROPIC_API_KEY="sk-ant-..."
+
+# verify the MCP server is reachable
+python python/MCP/health_check.py
+
+# run your first risk check
+python python/agents/liquidation_monitor.py 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045
+```
+
+No SmartCredit API key needed — the MCP endpoint is public.
+
+For full documentation visit [smartcredit.io/learn](https://smartcredit.io/learn).
 
 ## Community
 

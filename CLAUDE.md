@@ -33,7 +33,7 @@ python/MCP/        Direct MCP examples (call tools via user prompt)
 python/agents/     Agent-based examples (load .md as system prompt)
 python/scripts/    Utility scripts (run_all_examples.py)
 python/smartcredit.py  Shared helper — imported by all scripts
-.claude/agents/    6 agent definitions pulled from web3-borrow-lend-mcp repo
+.claude/agents/    6 agent definitions bundled from web3-borrow-lend-mcp repo
 ```
 
 ### Shared Helper
@@ -156,7 +156,7 @@ Copy `.env.example` to `.env` and fill in your key. `.env` is in `.gitignore`.
 
 ### Agent Definitions
 
-`.claude/agents/` files come from the upstream repo.
+`.claude/agents/` files are bundled in this repo and **must not be hand-edited** — they are owned by the upstream [web3-borrow-lend-mcp](https://github.com/SmartCredit-io/web3-borrow-lend-mcp) repo.
 To refresh all 6 agent definitions from GitHub:
 
 ```bash

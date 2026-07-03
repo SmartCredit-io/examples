@@ -118,11 +118,12 @@ python python/MCP/liquidation_risk.py 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045
 
 ---
 
-### `python/scripts/` — Utilities
+### `python/scripts/` — Utilities & Tools
 
 | Script | What it does |
 |--------|-------------|
 | `run_all_examples.py` | Runs every example script sequentially and prints a summary table (status, duration, tokens consumed). Waits 3s between scripts. |
+| `aave_positions/` | Fetches active Aave V3 borrow positions from on-chain data — see below. |
 
 ```bash
 python python/scripts/run_all_examples.py
@@ -172,12 +173,73 @@ for f in json.load(sys.stdin):
 
 ---
 
+## Aave V3 Active Positions Fetcher
+
+`python/scripts/aave_positions/` — a standalone CLI tool that discovers **currently active Aave V3 borrow positions** on Ethereum mainnet. Scans backwards from the latest block using the Etherscan API, validates each borrower on-chain, and stops as soon as enough positions are found.
+
+### Setup
+
+Add to `.env`:
+
+```env
+ETHERSCAN_API_KEY=your-etherscan-key
+RPC_URL=https://ethereum.publicnode.com   # free public RPC, no key needed
+```
+
+### Quick start
+
+```bash
+# Find 5 active positions (stops as soon as 5 are found)
+python python/scripts/aave_positions/main.py --limit 5
+
+# Find 20 positions with at least $10,000 debt
+python python/scripts/aave_positions/main.py --limit 20 --min-debt 10000
+
+# Find at-risk positions (health factor ≤ 1.5)
+python python/scripts/aave_positions/main.py --limit 50 --max-hf 1.5
+
+# Find USDC borrowers with per-asset breakdown
+python python/scripts/aave_positions/main.py --limit 10 --enrich --asset USDC
+
+# Write output to a specific CSV file
+python python/scripts/aave_positions/main.py --limit 100 --csv /tmp/borrowers.csv
+```
+
+### Parameters
+
+| Parameter | Default | Description |
+|---|---|---|
+| `--limit` | 100 | Stop after finding this many active positions |
+| `--min-debt` | 0 | Minimum total debt in USD |
+| `--max-hf` | 999 | Maximum health factor (e.g. `1.5` = at-risk positions only) |
+| `--asset` | all | Filter by borrowed asset symbol e.g. `USDC`, `WETH` (requires `--enrich`) |
+| `--enrich` | off | Add per-asset borrowed/collateral breakdown to output |
+| `--chunk-size` | 2000 | Blocks per Etherscan getLogs call |
+| `--csv` | auto | CSV output path (default: auto-named with limit + timestamp) |
+| `--end-block` | latest | Block to start scanning backwards from |
+| `--floor-block` | 16291127 | Oldest block to scan back to |
+
+### Output
+
+Each run writes two files to `python/scripts/aave_positions/output/`, named with the limit and timestamp:
+
+```
+active_positions_limit5_20260703_091500.csv
+active_positions_limit5_20260703_091500.json
+```
+
+CSV columns: `address`, `health_factor`, `total_debt_usd`, `total_collateral_usd`, `ltv`, `available_borrow_usd`
+
+With `--enrich`: adds `borrowed_assets` and `collateral_assets` columns.
+
+---
+
 ## Getting Started
 
 ```bash
 git clone https://github.com/SmartCredit-io/examples.git
 cd examples
-pip install -r python/requirements.txt
+pip install -r requirements.txt
 export ANTHROPIC_API_KEY="sk-ant-..."
 
 # verify the MCP server is reachable

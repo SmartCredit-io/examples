@@ -29,11 +29,13 @@ This repository contains code examples for integrating with [SmartCredit.io](htt
 ## Python — Aave Liquidation Monitor MCP
 
 ```
-python/MCP/        Direct MCP examples (call tools via user prompt)
-python/agents/     Agent-based examples (load .md as system prompt)
-python/scripts/    Utility scripts (run_all_examples.py)
-python/smartcredit.py  Shared helper — imported by all scripts
-.claude/agents/    6 agent definitions bundled from web3-borrow-lend-mcp repo
+python/MCP/                          Direct MCP examples (call tools via user prompt)
+python/agents/                       Agent-based examples (load .md as system prompt)
+python/scripts/run_all_examples.py   Runs all examples sequentially
+python/scripts/aave_positions/       Aave V3 active positions fetcher (standalone CLI)
+python/smartcredit.py                Shared helper — imported by all scripts
+.claude/agents/                      6 agent definitions bundled from web3-borrow-lend-mcp repo
+requirements.txt                     Single requirements file at repo root
 ```
 
 ### Shared Helper
@@ -145,6 +147,58 @@ python python/MCP/liquidation_risk.py 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045
 python python/scripts/run_all_examples.py
 ```
 
+---
+
+## Aave V3 Active Positions Fetcher
+
+`python/scripts/aave_positions/` — standalone CLI tool. Scans Ethereum mainnet backwards from the latest block using Etherscan getLogs, validates each borrower via public RPC (`eth_call`), stops when `--limit` active positions found.
+
+### Module layout
+
+```
+python/scripts/aave_positions/
+  main.py        Entry point — arg parsing, scan loop, export
+  config.py      Constants, Web3 setup, Etherscan rate limiter, date_to_block()
+  fetcher.py     LogFetcher — Etherscan getLogs pagination, chunk splitting
+  validator.py   PositionValidator — calls getUserAccountData, filters by debt/HF
+  enricher.py    PositionEnricher — per-asset breakdown (--enrich flag)
+  exporter.py    Exporter — writes CSV + JSON with timestamped filenames
+  abis/          pool.json, data_provider.json
+  output/        Runtime output (gitignored except .gitkeep)
+```
+
+### Key constants (config.py)
+
+- `POOL_ADDRESS = 0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2`
+- `DATA_PROVIDER_ADDRESS = 0x7B4EB56E7CD4b454BA8ff71E4518426369a138a3`
+- `V3_DEPLOY_BLOCK = 16291127`
+- `BORROW_TOPIC = Web3.to_hex(w3.keccak(text="Borrow(address,address,address,uint256,uint8,uint256,uint16)"))` — always use `Web3.to_hex()` not `.hex()` to guarantee `0x` prefix
+
+### Etherscan rate limiter
+
+Sliding-window deque of max 3 timestamps — sleeps if 3 calls made within 1 second. All Etherscan calls must go through `etherscan_get()` in `config.py`.
+
+### Output filenames
+
+Named with limit + timestamp: `active_positions_limit{N}_{YYYYMMDD_HHMMSS}.csv/.json`
+
+### Running
+
+```bash
+python python/scripts/aave_positions/main.py --limit 10
+python python/scripts/aave_positions/main.py --limit 50 --min-debt 10000 --max-hf 1.5
+python python/scripts/aave_positions/main.py --limit 10 --enrich --asset USDC
+```
+
+### Required env vars
+
+```
+ETHERSCAN_API_KEY=   # free tier sufficient
+RPC_URL=https://ethereum.publicnode.com   # free public RPC for eth_call
+```
+
+---
+
 ### Environment Variables
 
 ```bash
@@ -152,7 +206,8 @@ export ANTHROPIC_API_KEY="..."
 ```
 
 No SmartCredit API key is needed — the MCP endpoint is public.
-Copy `.env.example` to `.env` and fill in your key. `.env` is in `.gitignore`.
+Copy `.env.example` to `.env` and fill in your keys. `.env` is in `.gitignore`.
+`requirements.txt` is at the repo root — install with `pip install -r requirements.txt`.
 
 ### Agent Definitions
 

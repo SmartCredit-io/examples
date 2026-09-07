@@ -1,0 +1,256 @@
+# SmartCredit.io Examples
+
+Python examples for the SmartCredit Aave Liquidation Monitor MCP — real-time liquidation risk
+intelligence for Aave V3 borrower positions on Ethereum mainnet, via Claude agents or direct
+MCP calls. Also includes a standalone Aave V3 active positions fetcher.
+
+Links: https://smartcredit.io · https://twitter.com/smartcredit_io · https://t.me/SmartCredit_Community
+       https://smartcredit.io/learn
+MCP repo: https://github.com/SmartCredit-io/web3-borrow-lend-mcp
+
+Platform: Fixed-term fixed-interest DeFi loans · Personal fixed income funds · Fixed-rate
+leveraged Lido staking · ~20,000 registered users · Self-custodial, regulatory-compliant
+
+---
+
+## MCP Server
+
+URL: https://mcp.smartcredit.io/web3-borrow-lend-mcp
+Transport: Anthropic managed MCP (betas=["mcp-client-2025-04-04"])
+Auth: Public — no API key required
+Network: Ethereum mainnet (Aave V3)
+
+### MCP Tools
+
+get_liquidation_risk    Real-time liquidation risk for an Aave V3 borrower address.
+                        Returns: health factor, liquidation probability, risk tier,
+                        per-asset collateral/debt positions, and threshold prices.
+
+check_api_health        Ping the MCP server to confirm it is reachable.
+
+### Risk Tiers
+
+Safe        0–5%   liquidation probability — no action needed
+Watch       5–15%  — monitor closely
+Warning     15–35% — consider reducing exposure
+Danger      35–70% — reduce position urgently
+Critical    70–100% — immediate action required
+Liquidatable HF < 1.0 — position is liquidatable now
+
+---
+
+## Repository Structure
+
+python/smartcredit.py               Shared helper — imported by ALL example scripts
+python/agents/                      Agent-based examples (6 scripts)
+python/MCP/                         Direct MCP examples (2 scripts)
+python/scripts/run_all_examples.py  Run all examples sequentially with summary table
+python/scripts/aave_positions/      Standalone Aave V3 active positions fetcher (CLI)
+.claude/agents/                     6 agent definitions from web3-borrow-lend-mcp repo
+requirements.txt                    anthropic>=0.40.0, web3>=6.0.0, python-dotenv, requests
+.env.example                        Copy to .env and set ANTHROPIC_API_KEY
+
+---
+
+## Shared Helper: python/smartcredit.py
+
+Uses the Anthropic managed MCP beta (client.beta.messages.create with betas=["mcp-client-2025-04-04"]).
+Unlike the SSE/streamable-HTTP helpers in other projects, this is a single blocking call —
+no persistent connection, no background thread.
+
+MCP_SERVER = {
+    "type": "url",
+    "url": "https://mcp.smartcredit.io/web3-borrow-lend-mcp",
+    "name": "smartcredit-aave-liquidation-monitor",
+}
+
+Public function:
+
+run(prompt, system=None, model="claude-haiku-4-5-20251001", max_tokens=4096) -> str
+  Calls Claude with the SmartCredit MCP tools available via Anthropic's managed MCP beta.
+  Pass system to override with an agent definition body.
+
+sys.path setup required in scripts in python/agents/ and python/MCP/:
+  sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+  import smartcredit
+
+---
+
+## Two Example Patterns
+
+### Agent-based (python/agents/)
+
+The .md agent definition from .claude/agents/ is loaded as the system prompt. Tool
+selection and output format are defined in the .md, not in code.
+
+Pattern:
+1. Load .claude/agents/<name>.md
+2. Split on "---" to extract frontmatter and body (system prompt)
+3. Parse `model:` from frontmatter; default to claude-haiku-4-5-20251001
+4. Pass minimal user message (address + optional params — no API key needed)
+5. Call smartcredit.run(user_message, system=system_prompt, model=model)
+
+Note: load_agent() returns (model, body) — only 2 values, unlike ChainAware/SolPortfolio
+which also return the raw frontmatter string.
+
+  def load_agent(path: str) -> tuple[str, str]:
+      with open(path) as f:
+          content = f.read()
+      parts = content.split("---", 2)
+      frontmatter = parts[1] if len(parts) >= 3 else ""
+      body = parts[2].strip() if len(parts) >= 3 else content.strip()
+      m = re.search(r"^model:\s*(.+)$", frontmatter, re.MULTILINE)
+      model = m.group(1).strip() if m else "claude-haiku-4-5-20251001"
+      return model, body
+
+### Direct MCP (python/MCP/)
+
+A plain user prompt with all MCP tools available — no system prompt, no tool filtering.
+
+---
+
+## Agent Definitions (.claude/agents/)
+
+6 agent definitions — must not be hand-edited; come from the upstream repo.
+All use tools: mcp__smartcredit-aave-liquidation-monitor__get_liquidation_risk
+
+Refresh from GitHub:
+  gh api repos/SmartCredit-io/web3-borrow-lend-mcp/contents/.claude/agents | python3 -c "
+  import json, sys, base64, subprocess
+  for f in json.load(sys.stdin):
+      data = json.loads(subprocess.run(['gh', 'api', f['url']], capture_output=True, text=True).stdout)
+      open(f'.claude/agents/{f[\"name\"]}', 'w').write(base64.b64decode(data['content']).decode())
+      print('Updated', f['name'])
+  "
+
+---
+
+## Agent Examples (python/agents/)
+
+  liquidation_monitor.py   smartcredit-liquidation-monitor.md   Scannable risk report — HF, tier, thresholds
+  health_advisor.py        smartcredit-health-advisor.md        Actionable advice to improve HF and reduce risk
+  threshold_finder.py      smartcredit-threshold-finder.md      Per-asset liquidation price thresholds by proximity
+  stress_tester.py         smartcredit-stress-tester.md         Risk matrix across 7/14/30/90-day horizons
+  portfolio_scanner.py     smartcredit-portfolio-scanner.md     Batch scan multiple positions, ranked by risk
+  risk_reporter.py         smartcredit-risk-reporter.md         Full written risk report for docs or team sharing
+
+portfolio_scanner.py accepts either multiple inline addresses or a CSV file.
+CSV loader auto-detects column named address/wallet/Address/Wallet; falls back to first column.
+
+---
+
+## Direct MCP Examples (python/MCP/)
+
+  health_check.py       check_api_health        Ping the MCP server
+  liquidation_risk.py   get_liquidation_risk    Direct liquidation risk check for one address
+
+---
+
+## Running Examples
+
+Run all commands from the project root.
+
+  # agent examples — single address (demo address used if omitted)
+  python python/agents/liquidation_monitor.py
+  python python/agents/liquidation_monitor.py 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045
+  python python/agents/health_advisor.py 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045
+  python python/agents/threshold_finder.py 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045
+  python python/agents/stress_tester.py 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045
+  python python/agents/stress_tester.py 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045 60  # 60-day sigma
+  python python/agents/risk_reporter.py 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045
+  python python/agents/risk_reporter.py 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045 14 60
+
+  # portfolio scan
+  python python/agents/portfolio_scanner.py wallets.csv
+  python python/agents/portfolio_scanner.py 0xABC... 0xDEF... 0xGHI...
+
+  # direct MCP
+  python python/MCP/health_check.py
+  python python/MCP/liquidation_risk.py
+  python python/MCP/liquidation_risk.py 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045
+
+  # run all examples
+  python python/scripts/run_all_examples.py
+
+---
+
+## Setup
+
+  pip install -r requirements.txt
+  cp .env.example .env
+  # edit .env: set ANTHROPIC_API_KEY
+  # also set ETHERSCAN_API_KEY and RPC_URL if using the aave_positions fetcher
+
+Environment variables:
+  ANTHROPIC_API_KEY      Required — your Anthropic API key
+  SMARTCREDIT_MCP_URL    Optional — override for local dev
+  ETHERSCAN_API_KEY      Required for aave_positions fetcher (free tier sufficient)
+  RPC_URL                Required for aave_positions fetcher (e.g. https://ethereum.publicnode.com)
+
+---
+
+## Aave V3 Active Positions Fetcher (python/scripts/aave_positions/)
+
+Standalone CLI tool — independent of the MCP examples above. Scans Ethereum mainnet
+backwards from the latest block using Etherscan getLogs, validates each borrower via
+on-chain eth_call, stops when --limit active positions are found.
+
+Aave V3 contracts (Ethereum mainnet):
+  POOL_ADDRESS          0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2
+  DATA_PROVIDER_ADDRESS 0x7B4EB56E7CD4b454BA8ff71E4518426369a138a3
+  V3_DEPLOY_BLOCK       16291127
+  BORROW_TOPIC          keccak256("Borrow(address,address,address,uint256,uint8,uint256,uint16)")
+                        Always use Web3.to_hex() — not .hex() — to guarantee 0x prefix.
+
+Module layout:
+  main.py       Entry point — arg parsing, scan loop, export
+  config.py     Constants, Web3 setup, Etherscan rate limiter, date_to_block()
+  fetcher.py    LogFetcher — Etherscan getLogs pagination with chunk splitting
+  validator.py  PositionValidator — calls getUserAccountData, filters by debt/HF
+  enricher.py   PositionEnricher — per-asset breakdown (--enrich flag)
+  exporter.py   Exporter — writes CSV + JSON with timestamped filenames
+
+Rate limiter: sliding-window deque(maxlen=3) of timestamps — sleeps when 3 calls
+made within 1 second. All Etherscan calls must go through etherscan_get() in config.py.
+
+Output: two files per run in python/scripts/aave_positions/output/, named:
+  active_positions_limit{N}_{YYYYMMDD_HHMMSS}.csv/.json
+
+CSV columns: address, health_factor, total_debt_usd, total_collateral_usd, ltv,
+             available_borrow_usd (+ borrowed_assets, collateral_assets with --enrich)
+
+CLI parameters:
+  --limit        Stop after N active positions (default 100)
+  --min-debt     Minimum total debt in USD (default 0)
+  --max-hf       Maximum health factor, e.g. 1.5 = at-risk only (default 999)
+  --asset        Filter by borrowed asset symbol, e.g. USDC (requires --enrich)
+  --enrich       Add per-asset breakdown to output
+  --chunk-size   Blocks per Etherscan getLogs call (default 2000)
+  --csv          CSV output path (default: auto-named)
+  --end-block    Block to start scanning backwards from (default: latest)
+  --floor-block  Oldest block to scan back to (default: 16291127)
+
+  python python/scripts/aave_positions/main.py --limit 10
+  python python/scripts/aave_positions/main.py --limit 50 --min-debt 10000 --max-hf 1.5
+  python python/scripts/aave_positions/main.py --limit 10 --enrich --asset USDC
+  python python/scripts/aave_positions/main.py --limit 100 --csv /tmp/borrowers.csv
+
+---
+
+## Claude Code Setup
+
+Register the MCP server in Claude Code:
+
+  claude mcp add --transport http smartcredit-aave-liquidation-monitor \
+    https://mcp.smartcredit.io/web3-borrow-lend-mcp
+
+Copy agent definitions into your project:
+
+  cp .claude/agents/smartcredit-*.md your-project/.claude/agents/
+
+---
+
+## Further Reading
+
+- https://smartcredit.io/learn
+- https://github.com/SmartCredit-io/web3-borrow-lend-mcp
